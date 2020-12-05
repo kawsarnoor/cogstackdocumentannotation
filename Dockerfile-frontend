@@ -1,0 +1,29 @@
+FROM python:3.7
+WORKDIR /code
+
+# Update and upgrade everything
+RUN apt-get -y update && \
+    apt-get -y upgrade
+
+
+# Get node and npm
+RUN apt-get install curl && \
+    curl -sL https://deb.nodesource.com/setup_12.x | bash - && \
+    apt-get install nodejs && \
+    npm install -g npm@latest
+
+# ADD . . 
+WORKDIR /client
+
+COPY /client/package.json /client/package.json
+
+# Build frontend
+RUN npm install 
+RUN npm install -g @vue/cli@3.7.0
+
+COPY /client .
+
+CMD ["npm", "run", "serve"]
+
+# Build backend
+# RUN pip install -r requirements.txt
