@@ -1,7 +1,6 @@
 from flask import Flask, jsonify, request, json
 from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
-import nltk, csv
 from random import sample 
 import os.path
 from functools import wraps
@@ -11,7 +10,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 import time
 
 # instantiate the app
-DEBUG = True
+# DEBUG = True
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'randomsecretkey'
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///test.db'
@@ -364,22 +363,6 @@ def getAnnotatedDocument(user):
         'label_ids': [label_id], # keepinng this as a list as eventually this method needs to handle multiclass labelling 
     })
 
-
-
-
-# @app.route('/sampleNewDocument', methods=['GET'])
-# def samplenewdocument():
-#     all_documents= set(list(range(len(LABELS))))
-#     incomplete = list(all_documents.difference(set(COMPLETED)))
-
-#     #random sampling one atm
-#     sampled_id = sample(incomplete,1)[0]
-#     COMPLETED.append(sampled_id)
-#     saveProgress()
-    
-#     return jsonify({
-#         'status': 'success'
-#     })  
 
 if __name__ == '__main__':
     # app.run(host='0.0.0.0',port='5001')
