@@ -1,19 +1,16 @@
 <template>
     <nav class="navbar navbar-light bg-light text-center">
-      <a v-if="isAuth">
-        <button class="btn btn-primary" type="button" @click="home()" style="margin:10px">
-          <i class="fa fa-home"></i>
-        </button>
+      <div class="navbar-brand">
+        <a class="navbar-item" @click="home()">
+          <img src="https://avatars.githubusercontent.com/u/28688163?s=280&v=4" width="28" height="28">
+        </a>
+      </div>
+      <div class="navbar-end">
         <button class="btn btn-primary" type="button" @click="logout()">
           {{ username }}
           <i class="fa fa-sign-out"></i>
         </button>
-      </a>
-      <a v-else>
-        <button class="btn btn-primary" type="button" @click="logout()">
-          do not annotate!
-        </button>
-      </a>
+      </div>
     </nav>
 </template>
 
@@ -26,26 +23,29 @@
   
 	export default {
         
-        data() {
-            return {
-            username: localStorage.getItem('user'),
-            };
-        },
+    data() {
+      return {
+        username: localStorage.getItem('user'),
+        isAdmin: localStorage.getItem('isAdmin'),
+      };
+    },
 
 		computed: {
 			...mapGetters('auth', {
 				isAuth: 'isAuthenticated',
 			})
-        },
+    },
         
-        methods: {
-            logout: function () {
-              this.$store.dispatch('auth/logout');
-            },
-            home: function () {
-              router.push('/projects');
-            }
-        },
+    methods: {
+      logout: function () {
+        this.$store.dispatch('auth/logout');
+      },
+
+      home: function () {
+        router.push('/projects');
+      },
+      
+    },
 	}
 </script>
 

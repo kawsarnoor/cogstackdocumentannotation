@@ -26,6 +26,7 @@ const actions = {
 				console.log('succesfully logged in...');
 
 				localStorage.setItem('jwt', res.data.token);
+				localStorage.setItem('isAdmin', res.data.isAdmin);
 				localStorage.setItem('user', username);
 				localStorage.setItem('forceRefresh', 'refresh');
 
@@ -43,7 +44,7 @@ const actions = {
 	
 	refreshtoken: ({commit}) => {
 		let token = localStorage.getItem('jwt');
-		const path = 'http://' + root_api +  + ':5001/refreshtoken';
+		const path = 'http://' + root_api + ':5001/refreshtoken';
 		
         axios.post(path, {'user': localStorage.getItem('user')}, {headers: {'Authorization': localStorage.getItem('jwt')}})
             .then(res => {

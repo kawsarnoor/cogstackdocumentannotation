@@ -35,10 +35,13 @@ export default {
   name: 'Progess',
   props: {
     numbers: Number,
+    projectid: Number,
   },
+
   data() {
       return {
         projectid: Number,
+        nlptasktype: '',
         currentidx: Number,
         document_ids: [],
         completed_ids: [],
@@ -57,10 +60,13 @@ export default {
            var top_doc = (this.pageNumber) * this.documents_per_page;
            var bottom_doc = top_doc + this.documents_per_page;
            
-           if (this.document_ids.includes(top_doc+1)) {
+           if(this.document_ids.length > top_doc - 1) {
                 this.viewable_documents = this.document_ids.slice(top_doc, bottom_doc)
+
+        //    if (this.document_ids.includes(top_doc+1)) {
+        //         this.viewable_documents = this.document_ids.slice(top_doc, bottom_doc)
            } else {
-               this.pageNumber = this.pageNumber - 1
+               this.pageNumber = this.pageNumber - 1 // stay on the same page
            }
     },
     
@@ -91,7 +97,7 @@ export default {
     },
 
     next() {
-            if (this.currentidx < this.document_ids.length) {
+            if (this.currentidx <  this.document_ids[this.document_ids.length - 1] ) {
                 this.currentidx = this.currentidx + 1;
                 console.log('going forward to document ', this.currentidx);
                 EventBus.$emit("number-added", this.currentidx); 
@@ -107,7 +113,7 @@ export default {
     },
 
     prev() {
-            if (this.currentidx > 1) {
+            if (this.currentidx > this.document_ids[0]) {
                 this.currentidx = this.currentidx - 1;
                 console.log('going back to document ', this.currentidx);
                 EventBus.$emit("number-added", this.currentidx); 
@@ -136,7 +142,6 @@ export default {
         window.location.reload();
     }
 
-    this.projectid = 1;
     this.currentidx = 1; // retrieve using api
     this.pageNumber = -1;
     this.documents_per_page = 10
@@ -145,16 +150,17 @@ export default {
 
     const path = 'http://' + this.root_api + ':5001/getCompleted';
     axios.post(path, {'project_id': this.projectid}, {headers: {'Authorization': localStorage.getItem('jwt')}})
-    .then((res) => {
-        this.document_ids = res.data.document_ids;
-        this.completed_ids = res.data.completed_ids;
-        
-        // load in first x documents
-        this.nextPage();
+        .then((res) => {
+            this.document_ids = res.data.document_ids;
+            this.completed_ids = res.data.completed_ids;
+            this.nlptasktype = res.data.nlptasktype;
+            this.currentidx = this.document_ids[0];
 
-    })
-    .catch((error) => {
-        console.error(error);
+            // load in first x documents
+            this.nextPage();
+        })
+        .catch((error) => {
+            console.error(error);
     });
 
     // Event listener for previous and next document
@@ -180,7 +186,10 @@ export default {
                 console.error(error);
             });
       }
-      this.next();
+      // This is the code that we use to automatically move to next document. Useful only for multiclass
+      if (this.nlptasktype == 'multiclass'){
+        this.next();
+      }
     });
 
   }

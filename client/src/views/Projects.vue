@@ -72,7 +72,8 @@ export default {
       },
 
       openProject(project_id) {
-        router.push('/annotation');
+        console.log(project_id)
+        router.push({ name: 'Annotation', params: {projectid: project_id}});
       }
   },
 

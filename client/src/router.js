@@ -31,7 +31,7 @@ let router = new Router({
         }
       },
       {
-        path: '/annotation',
+        path: '/annotation/:projectid',
         name: 'Annotation',
         component: Annotation,
         meta: {

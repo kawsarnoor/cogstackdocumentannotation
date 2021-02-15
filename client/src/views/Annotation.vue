@@ -3,10 +3,10 @@
     <div class="row home-row" >
       <div class="col-sm-2" id='progress'>
         <Header/>
-        <Progress  :numbers="numbers" @number-added="numbers = $event"/>
+        <Progress  :numbers="numbers" :projectid="projectid" @number-added="numbers = $event"/>
       </div>
       <div class="col-sm-10">
-        <Document msg="Medical Text Classification Annotation Tool"/>
+        <Document msg="Medical Text Classification Annotation Tool" :projectid="projectid"/>
       </div>
     </div>
   </div>
@@ -29,7 +29,12 @@ export default {
   data() {
     return {
       numbers: 0,
+      projectid: Number,
     };
+  },
+  created() {
+    this.projectid = this.$route.params.projectid;
+    console.log('annotation page: ', this.projectid);
   },
 };
 </script>
