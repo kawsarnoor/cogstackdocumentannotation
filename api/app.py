@@ -1,7 +1,10 @@
 from flask import Flask, jsonify, request, json
 from flask_cors import CORS
-from flask_admin import Admin
+from flask_admin import Admin, AdminIndexView
 from flask_admin.contrib.sqla import ModelView
+
+from flask_security import current_user, login_required, RoleMixin, Security, SQLAlchemyUserDatastore, UserMixin, utils
+
 from flask_sqlalchemy import SQLAlchemy
 from random import sample 
 import os.path
@@ -10,7 +13,11 @@ from datetime import datetime, timezone, timedelta
 import jwt
 from werkzeug.security import generate_password_hash, check_password_hash
 import time
+from spacy.lang.en import English
 
+# Load spacy word tokenizer for sending documents as spans
+nlp = English()
+tokenizer = nlp.tokenizer
 
 # instantiate the app
 # DEBUG = True
@@ -64,7 +71,6 @@ class Dataset(db.Model):
     id = db.Column(db.Integer, primary_key=True) # primary keys are required by SQLAlchemy 
     name = db.Column(db.String(1000), unique=True, nullable=False) 
 
-
 class Document(db.Model):
     __tablename__ = 'document'
 
@@ -91,14 +97,13 @@ class Label(db.Model):
     labelDescription = db.Column(db.String(1000)) # some meta information for a label - description (e.g: negation)
     labelType = db.Column(db.String(1000)) # sentence annotation or document annotation
 
-
 class Project(db.Model):
     __tablename__ = 'project'
 
     id = db.Column(db.Integer, primary_key=True) # primary keys are required by SQLAlchemy   
     name = db.Column(db.String(1000), unique=True, nullable=False) 
     description = db.Column(db.Text, nullable=True)
-    nlptasktype = db.Column(db.String(1000), nullable=True) # multiclass, multilabel,
+    nlptasktype = db.Column(db.String(1000), nullable=True) # multiclass, multilabel, [seperate this out into its own table]
  
     dataset_id = db.Column(db.Integer, db.ForeignKey('dataset.id'))
     dataset = db.relationship("Dataset", backref=db.backref('project', cascade='delete, delete-orphan'))
@@ -106,25 +111,56 @@ class Project(db.Model):
     labels = db.relationship("Label", secondary=projectlabel_association, backref=db.backref('project', lazy='dynamic'))
     users = db.relationship("User", secondary=projectuser_association, backref=db.backref('project', lazy='dynamic'))
 
-
-class AnnotatedDocument(db.Model):
-    __tablename__ = 'annotateddocument'
+class Annotation(db.Model):
+    __tablename__ = 'annotation'
     
     id = db.Column(db.Integer, primary_key=True) # primary keys are required by SQLAlchemy
 
+    start_idx = db.Column(db.Integer)
+    end_idx = db.Column(db.Integer)
+    completed = db.Column(db.Boolean, default=False)
+
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'))
-    user = db.relationship("User", backref=db.backref('annotateddocument', cascade='delete, delete-orphan'))
+    user = db.relationship("User", backref=db.backref('annotation', cascade='delete, delete-orphan'))
 
     label_id = db.Column(db.Integer, db.ForeignKey('label.id'))
-    label = db.relationship("Label", backref=db.backref('annotateddocument', cascade='delete, delete-orphan'))
+    label = db.relationship("Label", backref=db.backref('annotation', cascade='delete, delete-orphan'))
 
     project_id = db.Column(db.Integer, db.ForeignKey('project.id'))
-    project = db.relationship("Project", backref=db.backref('annotateddocument', cascade='delete, delete-orphan'))
+    project = db.relationship("Project", backref=db.backref('annotation', cascade='delete, delete-orphan'))
 
     document_id = db.Column(db.Integer, db.ForeignKey('document.id'))
-    document = db.relationship("Document", backref=db.backref('annotateddocument', cascade='delete, delete-orphan'))
+    document = db.relationship("Document", backref=db.backref('annotation', cascade='delete, delete-orphan'))
+
+class MetaAnnotation(db.Model):
+    __tablename__ = 'metaannotation'
+
+    id = db.Column(db.Integer, primary_key=True) # primary keys are required by SQLAlchemy
+
+    annotatation_id = db.Column(db.Integer, db.ForeignKey('annotation.id'))
+    annotation = db.relationship("Annotation", backref=db.backref('metaannotation', cascade='delete, delete-orphan'))
+
+    metataskvalue_id = db.Column(db.Integer, db.ForeignKey('metataskvalue.id'))
+    metataskvalue = db.relationship("MetaTaskValue", backref=db.backref('metaannotation', cascade='delete, delete-orphan'))
+
+class MetaTask(db.Model):
+    __tablename__ = 'metatask'
     
-## API Endpoints
+    id = db.Column(db.Integer, primary_key=True) # primary keys are required by SQLAlchemy
+    metatask = db.Column(db.String(1000), nullable=True)  # name of metatask, e.g. negation, span selection etc
+    metatasktype = db.Column(db.String(1000), nullable=True) # multiclass, span, relation, multilabel etc
+
+class MetaTaskValue(db.Model):
+    __tablename__ = 'metataskvalue'
+    
+    id = db.Column(db.Integer, primary_key=True) # primary keys are required by SQLAlchemy
+    metataskvalue = db.Column(db.Text, nullable=True)
+
+    metatask_id = db.Column(db.Integer, db.ForeignKey('metatask.id'))
+    metatask = db.relationship("MetaTask", backref=db.backref('metataskvalue', cascade='delete, delete-orphan'))
+
+
+## API Endpoints ##
 def login_required(f):
     @wraps(f)
     def _verify(*args, **kwargs):
@@ -208,77 +244,42 @@ def testendpoint():
     print('arrived at endpoint')
     return 'succesfully reached endpoint'
 
-
-@app.route('/getnextdocument', methods=['GET'])
-def getnextdocument():
-    # Here we implement active learning
-    return jsonify({
-        'status': 'success',
-        'labels': LABELS[COMPLETED[-1]],
-        'spans': SPANS[COMPLETED[-1]],
-        'span_values': getspanvalueslist(-1)
-    })
-
-
-@app.route('/getpreviousdocument', methods=['GET'])
-def getpreviousdocument():
-    return jsonify({
-        'status': 'success',
-        'labels': LABELS[COMPLETED[-1]]
-    })
-
-
-@app.route('/updateSpans', methods=['POST'])
-def updateSpans():
-    response_object = {'status': 'success'}
-    req_data = request.get_json()
-    spans = req_data['newspans']
-    category = req_data['category']
-    label = req_data['label']     
-    id = req_data['id'] 
-    combinedspans = list(set(spans + SPANS[id][category][label])) 
-
-    print('updating span:', 'id:', id, ',label:', label, ',category:', category)
-
-    SPANS[id][category][label] = combinedspans
-    saveProgress()
-    return response_object
-
-
 @app.route('/changelabel', methods=['POST'])
 @login_required
 def changelabel(user):
     
     req_data = request.get_json()
-    label_id = req_data['label_id']
-    document_id = req_data['document_id']
-    project_id = req_data['project_id']
     
-    document = Document.query.get(document_id)
-    label = Label.query.get(label_id)
-    project = Project.query.get(project_id)
-
+    document = Document.query.get(req_data['document_id'])
+    label = Label.query.get(req_data['label_id'])
+    project = Project.query.get(req_data['project_id'])
 
     if project.nlptasktype == 'multiclass':
-        annotatedDocument = AnnotatedDocument.query.filter_by(project_id=project_id, document_id=document_id, user=user).first()
+        annotatedDocument = Annotation.query.filter_by(project_id=req_data['project_id'], document_id=req_data['document_id'], user=user).first()
 
-        if annotatedDocument:
-            annotatedDocument.label = label
-        else:
-            annotatedDocument = AnnotatedDocument(user=user, label=label, project=project, document=document)
+        if annotatedDocument: # Document has been labelled before
+            if annotatedDocument.label == label: # Document already has the same label as being assigned
+                db.session.delete(annotatedDocument) # This toggles the label to delete it
+            else:
+                annotatedDocument.label = label
+                annotatedDocument.completed = True
+                db.session.add(annotatedDocument)
+
+        else: # Document has not been labelled before. Create new label and save
+            annotatedDocument = Annotation(user=user, label=label, project=project, document=document, completed=True)
+            db.session.add(annotatedDocument)
     
     if project.nlptasktype == 'multilabel':
-        annotatedDocument = AnnotatedDocument.query.filter_by(project_id=project_id, document_id=document_id, label_id=label_id, user=user).first()
+        annotatedDocument = Annotation.query.filter_by(project_id=req_data['project_id'], document_id=req_data['document_id'], label_id=req_data['label_id'], user=user).first()
 
         if annotatedDocument:
-            annotatedDocument.label = label
+            db.session.delete(annotatedDocument) # This means the button has already been pressed. This toggles the function to delete it
+
         else:
-            annotatedDocument = AnnotatedDocument(user=user, label=label, project=project, document=document)   
+            annotatedDocument = Annotation(user=user, label=label, project=project, document=document, completed=True)   
+            db.session.add(annotatedDocument)
 
-
-    db.session.add(annotatedDocument)
     db.session.commit()
-
 
     return jsonify({'status': 'success'})
 
@@ -298,9 +299,9 @@ def getCompleted(user):
     documents = list(documents)
     document_ids = [d.id for d in documents]
 
-    annotateddocumentsquery = AnnotatedDocument.query.filter(AnnotatedDocument.document_id.in_(document_ids))
+    annotateddocumentsquery = Annotation.query.filter(Annotation.document_id.in_(document_ids))
     annotateddocuments = list(annotateddocumentsquery.filter_by(user=user))
-    completed_documents = [ad.document.id for ad in annotateddocuments]
+    completed_documents = [ad.document.id for ad in annotateddocuments if ad.completed]
 
     document_ids = []
     for d in documents:
@@ -308,7 +309,7 @@ def getCompleted(user):
 
     print('getCompleted', time.time() - start)
 
-    return jsonify({'document_ids': document_ids, 'completed_ids': completed_documents, 'nlptasktype': nlptasktype})
+    return jsonify({'document_ids': document_ids, 'completed_ids': completed_documents})
 
 
 @app.route("/getProjects", methods=['POST']) # This returns projects to the project page
@@ -339,25 +340,22 @@ def getProject(user):
     available_labels = [label.label for label in project.labels]
     available_label_ids = [label.id for label in project.labels]
     starting_document_id = project.dataset.document[0].id
+    nlptasktype = project.nlptasktype
 
-    return jsonify({'available_labels': available_labels, 'available_label_ids': available_label_ids, 'starting_document_id': starting_document_id})
+    return jsonify({'available_labels': available_labels, 'available_label_ids': available_label_ids, 'starting_document_id': starting_document_id, 'nlptasktype': nlptasktype})
 
 
 @app.route('/getDocument', methods=['POST'])
 @login_required
 def getdocument(user):
 
-    start = time.time()
-
     req_data = request.get_json()
     document_id = req_data['document_id']
-
     document_text = Document.query.get(document_id).text
-    
-    print('getDocument:', time.time() - start)
+    document_tokens = tokenizer(document_text).to_json()
 
     return jsonify({
-        'document_text': document_text
+        'document_tokens': document_tokens
     })
 
 
@@ -370,27 +368,98 @@ def getAnnotatedDocument(user):
     document_id = req_data['document_id']
 
     document_text = Document.query.get(document_id).text
-    annotateddocuments = AnnotatedDocument.query.filter_by(user=user, document_id=document_id).all()
+    annotateddocuments = Annotation.query.filter_by(user=user, document_id=document_id).all()
 
     if len(annotateddocuments) > 0:
         label_ids = [annotateddocument.label.id for annotateddocument in annotateddocuments]
     else:
-        label_ids = [1]
-
-
+        label_ids = [] # bug
 
     return jsonify({
         'label_ids': label_ids, # keepinng this as a list as eventually this method needs to handle multiclass labelling 
     })
 
+
+@app.route('/addSpanToAnnotation', methods=['POST'])
+@login_required
+def addSpanToAnnotation(user):
+
+    print('adding span to annotated Document')
+    req_data = request.get_json()
+    document_id = req_data['document_id']
+    project_id = req_data['project_id']
+    label_id = req_data['label_id']
+    span_ids = req_data['span_ids']
+
+    annotation = Annotation.query.filter_by(user=user, project_id = project_id, document_id=document_id, label_id = label_id).first()
+
+    # convert span ids to string:
+    span_ids_cleaned = [span_id.split('span_')[1] for span_id in span_ids]
+    span_ids_string = ','.join(span_ids_cleaned) # join span ids into string format for storage
+
+    # Prepare the metaannotation
+    metatask = MetaTask.query.filter(MetaTask.metatasktype.contains('snippet')).first()
+    newmetataskvalue = MetaTaskValue(metatask=metatask)
+    newmetataskvalue.metataskvalue = span_ids_string
+
+    db.session.add(newmetataskvalue)
+    db.session.commit()
+
+    metaannotation = MetaAnnotation(annotation=annotation, metataskvalue=newmetataskvalue)
+    
+    db.session.add(metaannotation)
+    db.session.commit()
+
+    return jsonify({'status': 'success'})
+
+@app.route('/getSpansForAnnotation', methods=['POST'])
+@login_required
+def getSpansForAnnotation(user):
+
+    print('getting spans for annotated document')
+    req_data = request.get_json()
+    document_id = req_data['document_id']
+    project_id = req_data['project_id']
+    label_id = req_data['label_id']
+
+    annotation = Annotation.query.filter_by(user=user, project_id = project_id, document_id=document_id, label_id = label_id).first()
+    metaannotations = MetaAnnotation.query.filter_by(annotation=annotation).all()
+
+    snippets = [metaannotation.metataskvalue.metataskvalue for metaannotation in metaannotations]
+
+    return jsonify({'snippets': snippets})
+    
+
+
+
 ## Initialise the admin panel
 admin = Admin(app, name='Cogstack Annotation Tool', template_mode='bootstrap3')
+
 admin.add_view(ModelView(User, db.session))
 admin.add_view(ModelView(Document, db.session))
 admin.add_view(ModelView(Project, db.session))
 admin.add_view(ModelView(Label, db.session))
-admin.add_view(ModelView(AnnotatedDocument, db.session))
+admin.add_view(ModelView(Annotation, db.session))
 admin.add_view(ModelView(Dataset, db.session))
+admin.add_view(ModelView(MetaAnnotation, db.session))
+admin.add_view(ModelView(MetaTask, db.session))
+admin.add_view(ModelView(MetaTaskValue, db.session))
+
+
+
+# class RoleAdmin(ModelView):
+
+#     # Prevent administration of Roles unless the currently logged-in user has the "admin" role
+#     def is_accessible(self):
+#         return current_user.admin
+
+
+# Initialize the SQLAlchemy data store and Flask-Security.
+# user_datastore = SQLAlchemyUserDatastore(db, User)
+# security = Security(app, user_datastore)
+# admin.add_view(RoleAdmin(User, db.session))
+# admin.add_view(RoleAdmin(Document, db.session))
+# admin.add_view(RoleAdmin(Project, db.session))
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0',port='5001')

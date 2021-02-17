@@ -8,7 +8,7 @@
                 <span class="column" @click="goToCurrentIndexPage()"><a><i class="fa fa-bookmark fa-1x"></i></a></span>
             </div>
             <div class="list-group list-group-flush">
-                <template v-for="(docindx, idx) in viewable_documents">
+                <template v-for="docindx in viewable_documents">
                     <div class="btn-group" :key="docindx" role="group" aria-label="Basic example">
                         <div class="input-group-prepend">
                             <div class="input-group-text" id="btnGroupAddon">{{ docindx }}</div>
@@ -40,7 +40,6 @@ export default {
 
   data() {
       return {
-        projectid: Number,
         nlptasktype: '',
         currentidx: Number,
         document_ids: [],
@@ -186,10 +185,12 @@ export default {
                 console.error(error);
             });
       }
+
       // This is the code that we use to automatically move to next document. Useful only for multiclass
-      if (this.nlptasktype == 'multiclass'){
-        this.next();
-      }
+    //   if (this.nlptasktype == 'multiclass'){
+    //     this.next();
+    //   }
+
     });
 
   }

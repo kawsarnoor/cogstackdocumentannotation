@@ -1,5 +1,5 @@
 <template>
-    <nav class="navbar navbar-light bg-light text-center">
+    <nav class="navbar is-mobile is-primary text-center">
       <div class="navbar-brand">
         <a class="navbar-item" @click="home()">
           <img src="https://avatars.githubusercontent.com/u/28688163?s=280&v=4" width="28" height="28">

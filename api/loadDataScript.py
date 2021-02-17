@@ -1,6 +1,6 @@
 import pandas as pd
 from app import db
-from app import User, Dataset, Document, Label, Project, AnnotatedDocument, projectlabel_association
+from app import User, Dataset, Document, Label, Project, projectlabel_association
 
 ## Load data in texts
 data_path = '~/Desktop/annotationTexts.csv'  # Expect a csv with columns id,text
