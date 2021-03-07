@@ -1,10 +1,8 @@
-from flask import Flask, jsonify, request, json
+from flask import Flask, render_template, jsonify, request, json
 from flask_cors import CORS
 from flask_admin import Admin, AdminIndexView
 from flask_admin.contrib.sqla import ModelView
-
 from flask_security import current_user, login_required, RoleMixin, Security, SQLAlchemyUserDatastore, UserMixin, utils
-
 from flask_sqlalchemy import SQLAlchemy
 from random import sample 
 import os.path
@@ -14,6 +12,8 @@ import jwt
 from werkzeug.security import generate_password_hash, check_password_hash
 import time
 from spacy.lang.en import English
+from utils.nerannotationsloader import addAnnotations
+import utils.elasticsearchutils as elasticsearchutils
 
 # Load spacy word tokenizer for sending documents as spans
 nlp = English()
@@ -244,7 +244,7 @@ def testendpoint():
     print('arrived at endpoint')
     return 'succesfully reached endpoint'
 
-@app.route('/changelabel', methods=['POST'])
+@app.route("/changelabel", methods=['POST'])
 @login_required
 def changelabel(user):
     
@@ -279,6 +279,20 @@ def changelabel(user):
             annotatedDocument = Annotation(user=user, label=label, project=project, document=document, completed=True)   
             db.session.add(annotatedDocument)
 
+    if project.nlptasktype == 'ner':
+        label = Label.query.filter_by(label=req_data['label_id']).first() # label we want to assign
+        current_entity = req_data['current_entity']
+        annotatedDocument = Annotation.query.filter_by(project_id=req_data['project_id'], 
+                                                        document_id=req_data['document_id'], 
+                                                        start_idx=current_entity['start'],
+                                                        end_idx=current_entity['end'],
+                                                        user=user).first()
+
+        if annotatedDocument: # Document has been labelled before
+                annotatedDocument.label = label
+                annotatedDocument.completed = True
+                db.session.add(annotatedDocument)
+    
     db.session.commit()
 
     return jsonify({'status': 'success'})
@@ -359,9 +373,32 @@ def getdocument(user):
     })
 
 
-@app.route('/getAnnotatedDocument', methods=['POST'])
+@app.route('/getDocumentNER', methods=['POST'])
 @login_required
-def getAnnotatedDocument(user):
+def getDocumentNER(user):
+
+    req_data = request.get_json()
+    document_id = req_data['document_id']
+    project_id = req_data['project_id']
+
+    annotations = Annotation.query.filter_by(user=user, project_id=project_id, document_id=document_id).all()
+
+    document_text = Document.query.get(document_id).text
+    document_tokens = tokenizer(document_text).to_json()
+
+    annotations_cutdown = [(annotation.start_idx,annotation.end_idx,annotation.label.label) for annotation in annotations]
+    
+    tokens_with_annotations = addAnnotations(annotations_cutdown, document_tokens)
+
+    return jsonify({
+        'document_tokens': tokens_with_annotations,
+        'document_text': document_text
+    })
+
+
+@app.route('/getAnnotatedDocumentMultiClassMultiLabel', methods=['POST'])
+@login_required
+def getAnnotatedDocumentMultiClassMultiLabel(user):
 
     print('getting annotated Document')
     req_data = request.get_json()
@@ -428,8 +465,54 @@ def getSpansForAnnotation(user):
     snippets = [metaannotation.metataskvalue.metataskvalue for metaannotation in metaannotations]
 
     return jsonify({'snippets': snippets})
-    
 
+@app.route('/getEntityInfo', methods=['POST'])
+@login_required
+def getEntityInfo(user):
+
+    req_data = request.get_json()
+    cui= req_data['cui']
+    unique = req_data['unique']
+
+    es_results = elasticsearchutils.searchSnomedConcept(cui)    
+    entity_information = es_results[0]['_source']
+
+    return jsonify({'entity_information': entity_information})
+
+@app.route('/searchconceptinelastic', methods=['POST'])
+@login_required
+def searchconceptinelastic(user):
+
+    req_data = request.get_json()
+    cui = req_data['searchConceptString']
+    unique = req_data['unique']
+
+    searchresult = elasticsearchutils.searchSnomedConcept(cui)     
+    print(searchresult)
+
+    return jsonify({'searchresult': searchresult})
+
+
+@app.route('/deleteEntity', methods=['POST'])
+@login_required
+def deleteEntity(user):
+
+    req_data = request.get_json()
+    entity = req_data['entity']
+    document_id = req_data['document_id']
+    project_id = req_data['project_id']
+
+    label = Label.query.filter_by(label=entity['nlp_cuis']).all()[0]
+
+    annotations = Annotation.query.filter_by(user=user, document_id=document_id, project_id=project_id, label=label, start_idx=entity['start'], end_idx=entity['end']).all()
+
+    for delann in annotations:
+        db.session.delete(delann)
+        db.session.commit()
+
+
+    
+    return jsonify({'success': success})
 
 
 ## Initialise the admin panel
@@ -463,4 +546,3 @@ admin.add_view(ModelView(MetaTaskValue, db.session))
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0',port='5001')
-    # app.run(host='0.0.0.0')

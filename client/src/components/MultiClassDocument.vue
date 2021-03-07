@@ -24,7 +24,7 @@
       </div>
       <div class="card-body" id='document_text'>
         <p class="card-text overflowAuto">
-          <span v-for="(span, span_idx) in document_text['tokens']" :key="span" :id="'span_' + span_idx" class="">
+          <span v-for="(span, span_idx) in document_text['tokens']" :key="span" :id="'span_' + span_idx">
             {{ document_text['text'].slice(span['start'], span['end'])}}
           </span>
         </p>
@@ -55,8 +55,6 @@ export default {
       document_text: '',
       labels: [],
       linkedspans: [],
-      // spans: {},
-      // spanvalues: [],
       currentidx: Number, // this is current document_idx
       root_api: process.env.VUE_APP_URL,
     };
@@ -64,7 +62,7 @@ export default {
   methods: {
     
     retrieveAnnotatedDocument(idx) {
-      const ann_document_pathpath = 'http://' + this.root_api + ':5001/getAnnotatedDocument';
+      const ann_document_pathpath = 'http://' + this.root_api + ':5001/getAnnotatedDocumentMultiClassMultiLabel';
       axios.post(ann_document_pathpath, {'document_id': idx}, {headers: {'Authorization': localStorage.getItem('jwt')}})
         .then((res) => {
           this.labels = res.data.label_ids;
@@ -102,8 +100,7 @@ export default {
           for (let i=0; i<this.available_label_ids.length; i++){
             this.getlinkedspans(this.available_label_ids[i]); 
           }
-
-
+          
         })
         .catch((error) => {
           console.error(error);
@@ -120,6 +117,8 @@ export default {
         .then((res) => {
           EventBus.$emit("label-added", this.currentidx);
           this.retrieveAnnotatedDocument(this.currentidx)
+
+
         })
         .catch((error) => {
           console.error(error);

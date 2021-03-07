@@ -1,36 +1,77 @@
 <template>
-<!-- eslint-disable max-len -->
-  <div class="document">
-    <div class="card text-center">
-      <div class="card-header">
-        <div class="category">
-          <div class="row">
-            <div class="col-12">
-              <div class="btn-group" role="group" v-for="(label, idx) in available_labels" :key="label">
+<!-- eslint-disable-->
+  <div class="columns">
+    <div class="column is-two-thirds">
+        <div class="card text-center">
+          <div class="card-body" id='document_text'>
+            <p class="card-text overflowAuto">
+              <span v-for="(span, span_idx) in document_tokens" :key="span" >
+                <span :id="'span_' + span_idx" v-if="span.nlp_cuis != ''" class="tag is-info is-medium">
+                    <span @click="displayEntity(span, span_idx)" class="chosen">{{ document_text.slice(span['start'],span['end'])}}</span>
+                    <button class="delete is-small" @click="deleteEntity(span, span_idx)"></button>
+                </span>
+                <span :id="'span_' + span_idx" v-else>
+                  {{ document_text.slice(span['start'],span['end']) }}
+                </span>
+              </span>
+            </p>
+          </div>
+      </div>
+    </div>
+    <div class="column">
+         <div class="card has-text-left">
+          <div class="card-body" id='document_text'>
+            <div class="card-text">
 
-                    <div v-if="labels.includes(available_label_ids[idx])" class="buttons has-addons">
-                      <button class="button is-success" @click="changelabel(available_label_ids[idx])">{{label}}</button>
+              <article class="message is-info">
+                <div class="message-header">
+                  <p>Entity Information</p>
+                </div>
+                <div class="message-body">
 
-                      <button class="button" @click="linkTexttoLabel(label, idx)">
-                        <i class="fa fa-quote-right"></i>
-                      </button>
-                      <button class="button">
-                        <i class="fa fa-eye"></i>
-                      </button>
+                  <div class="dropdown" id='searchcontainer'>
+                    <div class="dropdown ">
+                      <div class="dropdown-trigger">
+                          <div class="field">
+                              <p class="control is-expanded has-icons-right">
+                                  <input class="input is-rounded" type="text" placeholder="Search for alternative concept" @keyup.enter="searchConcept()" v-model.lazy="searchConceptString">
+                                  <span class="icon is-small is-right"><i class="fa fa-search"></i></span>
+                              </p>
+                          </div>
+                      </div>
+                      <div class="dropdown-menu" role="menu" >
+                        <div class="dropdown-content" v-for="result in searchresults">
+                          <a class="dropdown-item" @click="changelabel(result._source.cui)">
+                            <p><strong>CUI</strong>: {{ result._source.cui }} <strong>Pretty Name</strong>: {{ result._source.pretty_name }}</p>
+                          </a>
+                        </div>
+                      </div>
                     </div>
+                  </div>
 
-                    <button v-else class="button" @click="changelabel(available_label_ids[idx])"> {{label}} </button>
-              </div>
+                  <p><strong>CUI: </strong> {{ current_entity_label_info.cui }}</p>
+                  <p><strong>Pretty Name: </strong>{{ current_entity_label_info.pretty_name }}</p>
+                  <p><strong>Source Text: </strong> {{ current_entity_label_info.source_text }}</p>
+                  <p><strong>TUI: </strong>{{ current_entity_label_info.tui }}</p>
+                  <p><strong>Type: </strong>{{ current_entity_label_info.type }}</p>
+                </div>
+              </article>
+
+              <article class="message is-info">
+                <div class="message-header">
+                  <p>Meta Information</p>
+                </div>
+                <div class="message-body">
+              <h5>Negated</h5>
+                  <button class="button is-rounded is-success"> <span class="icon"><i class="fa fa-check"></i></span> <span>Negated</span></button>
+                  <h5>Experienced</h5>
+                  <button class="button is-rounded"> <span>Patient</span></button>
+                  <button class="button is-rounded is-success"> <span class="icon"><i class="fa fa-check"></i></span> <span>Non-Patient</span></button>
+                </div>
+              </article>
+            
             </div>
           </div>
-        </div>
-      </div>
-      <div class="card-body" id='document_text'>
-        <p class="card-text overflowAuto">
-          <span v-for="(span, span_idx) in document_text['tokens']" :key="span" :id="'span_' + span_idx">
-            {{ document_text['text'].slice(span['start'],span['end'])}}
-          </span>
-        </p>
       </div>
     </div>
   </div>
@@ -40,7 +81,6 @@
 /*eslint-disable*/
 
 import axios from 'axios';
-import rangy from 'rangy';
 import { EventBus } from "../main.js";
 
 export default {
@@ -55,11 +95,16 @@ export default {
       available_labels: [],
       available_label_ids: [],
       document_text: '',
+      document_tokens: [],
       labels: [],
+      searchresults: [],
       spans: {},
       spanvalues: [],
       currentidx: Number, // this is current document_idx
       root_api: process.env.VUE_APP_URL,
+      current_entity_label_info: [],
+      current_span: '',
+      searchConceptString: '',
     };
   },
   methods: {
@@ -93,67 +138,86 @@ export default {
     },
 
     getnextdocument(newIdx) {
-      const document_path = 'http://' + this.root_api + ':5001/getDocument';
-      axios.post(document_path, {'document_id': newIdx}, {headers: {'Authorization': localStorage.getItem('jwt')}})
+      const path = 'http://' + this.root_api + ':5001/getDocumentNER';
+      axios.post(path, {'document_id': newIdx ,'project_id': this.projectid}, {headers: {'Authorization': localStorage.getItem('jwt')}})
         .then((res) => {
-          this.document_text = res.data.document_tokens;
-          // this.document_text = this.document_text.replace(new RegExp('\r?\n','g'), '<br/>');
-          this.retrieveAnnotatedDocument(newIdx);
+          this.document_text = res.data.document_text;
+          this.document_tokens = res.data.document_tokens;
+          let searchContainer = document.getElementById("searchcontainer");
+          searchContainer.classList.remove('is-active')
         })
         .catch((error) => {
           console.error(error);
         });
-
     },
 
     changelabel(label_id) {
       const path = 'http://' + this.root_api + ':5001/changelabel';
-
-      axios.post(path, { 'label_id': label_id, 'document_id': this.currentidx, 'project_id': this.projectid},
+      let current_entity = this.document_tokens[this.current_entity_label_info.span_idx]
+      axios.post(path, { 'label_id': label_id, 'current_entity': current_entity, 'document_id': this.currentidx, 'project_id': this.projectid},
                         {headers: {'Authorization': localStorage.getItem('jwt')}})
         .then((res) => {
-          EventBus.$emit("label-added", this.currentidx);
-          this.retrieveAnnotatedDocument(this.currentidx)
+          this.getnextdocument(this.currentidx)
         })
         .catch((error) => {
           console.error(error);
         });
     },
 
-    linkTexttoLabel(label, label_id) {
-      const sel = rangy.getSelection();
-      const span_ids = [];
-      for (let r = 0, range, spans; r < sel.rangeCount; ++r) {
-          range = sel.getRangeAt(r);
-          // If a single span (word phrase) is chosen do the following
-          if (range.startContainer == range.endContainer && range.startContainer.nodeType == 3) {
-              if (sel == ''){
-                break // This is a hack. Clicking on part of the screen is registered to one of the spans
-              }
-              range = range.cloneRange();
-              range.selectNode(range.startContainer.parentNode);
-          }
-          spans = range.getNodes([1], function(node) {
-              return node.nodeName.toLowerCase() == "span";
-          });
-          for (let i = 0, len = spans.length; i < len; ++i) {
-              span_ids.push(spans[i].id);
-          }
-      }
-      
-      // this.spans[category][label] = this.spans[category][label].concat(ids);
-      // const path = 'http://' + this.root_api + ':5001/updateSpans';
-      // let newspans = this.spans[category][label];
-      
-      // axios.post(path, {category, label, newspans, id })
-      //   .then(() => {
-      //     this.getnextdocument(this.currentidx);
-      //   })
-      //   .catch((error) => {
-      //     console.error(error);
-      // });
+    displayEntity(span, span_idx){
+      this.current_entity_label = span.nlp_cuis
+      console.log(span)
+      const path = 'http://' + this.root_api + ':5001/getEntityInfo';
+
+      axios.post(path, { 'cui': span.nlp_cuis, 'unique': true},
+                        {headers: {'Authorization': localStorage.getItem('jwt')}})
+        .then((res) => {
+          this.current_entity_label_info = res.data.entity_information
+          this.current_entity_label_info['source_text'] = this.document_text.slice(span['start'],span['end'])
+          this.current_entity_label_info['span_idx'] = span_idx
+        })
+        .catch((error) => {
+          console.error(error);
+        });
     },
-  
+
+    deleteEntity(span, span_idx){
+
+      document.getElementById("span_" + span_idx).classList.remove('is-info');
+
+      const path = 'http://' + this.root_api + ':5001/deleteEntity';
+
+      axios.post(path, { 'entity': span, 'project_id': this.projectid, 'document_id': this.currentidx},
+                        {headers: {'Authorization': localStorage.getItem('jwt')}})
+        .then((res) => {
+          this.getnextdocument(this.currentidx)
+        })
+        .catch((error) => {
+          console.error(error);
+        });
+    },
+
+    searchConcept(){
+      if (this.searchConceptString === ""){
+        let searchContainer = document.getElementById("searchcontainer");
+        searchContainer.classList.remove('is-active')
+        return
+      }
+
+      const path = 'http://' + this.root_api +':5001/searchconceptinelastic';
+
+      axios.post(path, {'searchConceptString': this.searchConceptString, 'unique': false},
+                        {headers: {'Authorization': localStorage.getItem('jwt')}})
+      .then((res) => {
+          this.searchresults = res.data.searchresult
+          let searchContainer = document.getElementById("searchcontainer");
+          searchContainer.classList.add('is-active')
+      })
+      .catch((error) => {
+          console.error(error);
+      });
+
+    },
 
   },
 
@@ -175,16 +239,7 @@ export default {
 
 <!-- Add "scoped" attribute to limit CSS to this component only -->
 <style scoped>
-input {
-  margin: 3px;
-}
-h3 {
-  margin: 0px 0 0;
-}
-ul {
-  list-style-type: none;
-  padding: 0;
-}
+
 li {
   display: inline-block;
   margin: 0 10px;
@@ -221,4 +276,17 @@ pre {
   white-space: pre-wrap;
   word-break: keep-all
 }
+span.chosen:hover {
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.dropdown {
+  width: 100%;
+}
+.dropdown-trigger {
+    width: 100%
+}
+
+
 </style>

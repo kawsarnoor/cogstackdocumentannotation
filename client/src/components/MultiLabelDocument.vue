@@ -7,18 +7,15 @@
           <div class="row">
             <div class="col-12">
               <div class="btn-group" role="group" v-for="(label, idx) in available_labels" :key="label">
-
                     <div v-if="labels.includes(available_label_ids[idx])" class="buttons has-addons">
                       <button class="button is-success" @click="changelabel(available_label_ids[idx])">{{label}}</button>
-
-                      <button class="button" @click="linkTexttoLabel(label, idx)">
+                      <button class="button" @click="linkTexttoLabel(available_label_ids[idx])">
                         <i class="fa fa-quote-right"></i>
                       </button>
-                      <button class="button">
+                      <button class="button" @click="getlinkedspans(available_label_ids[idx])">
                         <i class="fa fa-eye"></i>
                       </button>
                     </div>
-
                     <button v-else class="button" @click="changelabel(available_label_ids[idx])"> {{label}} </button>
               </div>
             </div>
@@ -28,7 +25,7 @@
       <div class="card-body" id='document_text'>
         <p class="card-text overflowAuto">
           <span v-for="(span, span_idx) in document_text['tokens']" :key="span" :id="'span_' + span_idx">
-            {{ document_text['text'].slice(span['start'],span['end'])}}
+            {{ document_text['text'].slice(span['start'], span['end'])}}
           </span>
         </p>
       </div>
@@ -42,6 +39,8 @@
 import axios from 'axios';
 import rangy from 'rangy';
 import { EventBus } from "../main.js";
+import $ from 'jquery';
+
 
 export default {
   name: 'MultiLabelDocument',
@@ -56,7 +55,7 @@ export default {
       available_label_ids: [],
       document_text: '',
       labels: [],
-      assigned_spans: {},
+      linkedspans: [],
       currentidx: Number, // this is current document_idx
       root_api: process.env.VUE_APP_URL,
     };
@@ -64,7 +63,7 @@ export default {
   methods: {
     
     retrieveAnnotatedDocument(idx) {
-      const ann_document_pathpath = 'http://' + this.root_api + ':5001/getAnnotatedDocument';
+      const ann_document_pathpath = 'http://' + this.root_api + ':5001/getAnnotatedDocumentMultiClassMultiLabel';
       axios.post(ann_document_pathpath, {'document_id': idx}, {headers: {'Authorization': localStorage.getItem('jwt')}})
         .then((res) => {
           this.labels = res.data.label_ids;
@@ -98,6 +97,12 @@ export default {
           this.document_text = res.data.document_tokens;
           // this.document_text = this.document_text.replace(new RegExp('\r?\n','g'), '<br/>');
           this.retrieveAnnotatedDocument(newIdx);
+
+          // Highlight all of the linked spans of texts
+          for (let i=0; i<this.available_label_ids.length; i++){
+            this.getlinkedspans(this.available_label_ids[i]); 
+          }
+          
         })
         .catch((error) => {
           console.error(error);
@@ -106,6 +111,7 @@ export default {
     },
 
     changelabel(label_id) {
+
       const path = 'http://' + this.root_api + ':5001/changelabel';
 
       axios.post(path, { 'label_id': label_id, 'document_id': this.currentidx, 'project_id': this.projectid},
@@ -119,16 +125,18 @@ export default {
         });
     },
 
-    linkTexttoLabel(label, label_id) {
+    linkTexttoLabel(label_id) {
       const sel = rangy.getSelection();
       const span_ids = [];
+
+      if ((sel == '') || (sel.rangeCount == 0)){
+        return
+      }
+
       for (let r = 0, range, spans; r < sel.rangeCount; ++r) {
           range = sel.getRangeAt(r);
           // If a single span (word phrase) is chosen do the following
           if (range.startContainer == range.endContainer && range.startContainer.nodeType == 3) {
-              if (sel == ''){
-                break // This is a hack. Clicking on part of the screen is registered to one of the spans
-              }
               range = range.cloneRange();
               range.selectNode(range.startContainer.parentNode);
           }
@@ -140,18 +148,37 @@ export default {
           }
       }
       
-      // this.spans[category][label] = this.spans[category][label].concat(ids);
-      // const path = 'http://' + this.root_api + ':5001/updateSpans';
-      // let newspans = this.spans[category][label];
-      
-      // axios.post(path, {category, label, newspans, id })
-      //   .then(() => {
-      //     this.getnextdocument(this.currentidx);
-      //   })
-      //   .catch((error) => {
-      //     console.error(error);
-      // });
+      const path = 'http://' + this.root_api + ':5001/addSpanToAnnotation';
+      axios.post(path, {'document_id': this.currentidx, 'project_id': this.projectid, 'label_id': label_id, 'span_ids': span_ids},
+                        {headers: {'Authorization': localStorage.getItem('jwt')}})
+        .then(() => {
+          console.log('label added succesfully')
+          this.getlinkedspans(label_id);
+        })
+        .catch((error) => {
+          console.error(error);
+      });
     },
+
+    getlinkedspans(label_id) {
+      const path = 'http://' + this.root_api + ':5001/getSpansForAnnotation';
+      axios.post(path, {'document_id': this.currentidx, 'project_id': this.projectid, 'label_id': label_id},
+                        {headers: {'Authorization': localStorage.getItem('jwt')}})
+        .then((res) => {
+          console.log('spans retrieved succesfully')
+          
+          for (let i=0; i < res.data.snippets.length; i++){
+            var snippets = (res.data.snippets)[i].split(',')
+            for (let j=0; j < snippets.length; j++){
+              $('#span_'+snippets[j]).css('background-color',"#00FFFF")
+            }
+          }
+
+        })
+        .catch((error) => {
+          console.error(error);
+      });
+    }
   
 
   },

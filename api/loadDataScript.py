@@ -65,7 +65,7 @@ def createDocuments(mnd_dataset, texts):
     # Create Documents
     mnd_document_texts = texts
     mnd_documents = []
-    for dt in mnd_document_texts:
+    for dt in mnd_document_texts[0:5]:
         document = Document(text=dt, dataset=mnd_dataset)
         mnd_documents.append(document)
         db.session.add(document)

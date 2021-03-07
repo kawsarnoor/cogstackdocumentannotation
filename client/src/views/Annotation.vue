@@ -9,6 +9,7 @@
       <div class="col-sm-10">
         <MultiLabelDocument  v-if="nlptasktype == 'multilabel'" msg="Medical Text Classification Annotation Tool" :projectid="projectid"/>
         <MultiClassDocument v-if="nlptasktype == 'multiclass'" msg="Medical Text Classification Annotation Tool" :projectid="projectid"/>
+        <NERDocument v-if="nlptasktype == 'ner'" msg="Medical Text Classification Annotation Tool" :projectid="projectid"/>
       </div>
     </div>
   </div>
@@ -22,6 +23,7 @@ import axios from 'axios';
 import Progress from '@/components/Progress.vue';
 import MultiLabelDocument from '@/components/MultiLabelDocument.vue';
 import MultiClassDocument from '@/components/MultiClassDocument.vue';
+import NERDocument from '@/components/NERDocument.vue'
 
 import Header from '@/components/Header.vue';
 
@@ -33,6 +35,7 @@ export default {
     Progress,
     MultiLabelDocument,
     MultiClassDocument,
+    NERDocument,
   },
   data() {
     return {
