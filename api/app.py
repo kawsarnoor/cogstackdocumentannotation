@@ -529,7 +529,6 @@ admin.add_view(ModelView(MetaTask, db.session))
 admin.add_view(ModelView(MetaTaskValue, db.session))
 
 
-
 # class RoleAdmin(ModelView):
 
 #     # Prevent administration of Roles unless the currently logged-in user has the "admin" role

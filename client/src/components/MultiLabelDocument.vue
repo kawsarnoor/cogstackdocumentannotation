@@ -12,7 +12,7 @@
                       <button class="button" @click="linkTexttoLabel(available_label_ids[idx])">
                         <i class="fa fa-quote-right"></i>
                       </button>
-                      <button class="button" @click="getlinkedspans(available_label_ids[idx])">
+                      <button class="button" @click="highlightspans(available_label_ids[idx])">
                         <i class="fa fa-eye"></i>
                       </button>
                     </div>
@@ -111,9 +111,7 @@ export default {
     },
 
     changelabel(label_id) {
-
       const path = 'http://' + this.root_api + ':5001/changelabel';
-
       axios.post(path, { 'label_id': label_id, 'document_id': this.currentidx, 'project_id': this.projectid},
                         {headers: {'Authorization': localStorage.getItem('jwt')}})
         .then((res) => {
@@ -178,9 +176,43 @@ export default {
         .catch((error) => {
           console.error(error);
       });
+    },
+
+    highlightspans(label_id) {
+      const path = 'http://' + this.root_api + ':5001/getSpansForAnnotation';
+      axios.post(path, {'document_id': this.currentidx, 'project_id': this.projectid, 'label_id': label_id},
+                        {headers: {'Authorization': localStorage.getItem('jwt')}})
+        .then((res) => {
+          console.log('spans retrieved succesfully')
+          
+          for (let i=0; i < res.data.snippets.length; i++){
+            var snippets = (res.data.snippets)[i].split(',')
+            for (let j=0; j < snippets.length; j++){
+              $('#span_'+snippets[j]).css('background-color',"#FFFF00")
+            }
+          }
+
+          this.sleep(1000).then(function() {
+            console.log('done sleeping')
+            for (let i=0; i < res.data.snippets.length; i++){
+              var snippets = (res.data.snippets)[i].split(',')
+              for (let j=0; j < snippets.length; j++){
+                $('#span_'+snippets[j]).css('background-color',"#00FFFF")
+              }
+            }
+          })
+          
+        })
+        .catch((error) => {
+          console.error(error);
+      });
+    },
+
+    sleep(ms) {
+      console.log('sleeping for some time now')
+      return new Promise(resolve => setTimeout(resolve, ms));
     }
   
-
   },
 
   created() {
