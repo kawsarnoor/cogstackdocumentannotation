@@ -24,8 +24,9 @@
       </div>
       <div class="card-body" id='document_text'>
         <p class="card-text overflowAuto">
-          <span v-for="(span, span_idx) in document_text['tokens']" :key="span" :id="'span_' + span_idx">
-            {{ document_text['text'].slice(span['start'], span['end'])}}
+          <span v-for="(span, span_idx) in document_text['tokens']" :key="span" >
+            <!-- {{ document_text['text'].slice(span['start'], span['end'])}} -->
+              <span v-html="document_text['text'].slice(span['start'],span['end'])" :id="'span_' + span_idx" />{{ ' ' }}
           </span>
         </p>
       </div>
@@ -116,9 +117,7 @@ export default {
                         {headers: {'Authorization': localStorage.getItem('jwt')}})
         .then((res) => {
           EventBus.$emit("label-added", this.currentidx);
-          this.retrieveAnnotatedDocument(this.currentidx)
-
-
+          this.getnextdocument(this.currentidx)
         })
         .catch((error) => {
           console.error(error);
@@ -144,7 +143,9 @@ export default {
               return node.nodeName.toLowerCase() == "span";
           });
           for (let i = 0, len = spans.length; i < len; ++i) {
+            if (spans[i].id){
               span_ids.push(spans[i].id);
+            }  
           }
       }
       
@@ -171,6 +172,7 @@ export default {
             var snippets = (res.data.snippets)[i].split(',')
             for (let j=0; j < snippets.length; j++){
               $('#span_'+snippets[j]).css('background-color',"#00FFFF")
+              $('#span_'+snippets[j]).parent().css( "background-color", "#00FFFF" )
             }
           }
 

@@ -12,12 +12,14 @@ import jwt
 from werkzeug.security import generate_password_hash, check_password_hash
 import time
 from spacy.lang.en import English
+from spacy.symbols import ORTH
 from utils.nerannotationsloader import addAnnotations
 import utils.elasticsearchutils as elasticsearchutils
 
 # Load spacy word tokenizer for sending documents as spans
 nlp = English()
 tokenizer = nlp.tokenizer
+tokenizer.add_special_case("<br>", [{ORTH: "<br>"}])
 
 # instantiate the app
 # DEBUG = True
@@ -263,6 +265,11 @@ def changelabel(user):
             else:
                 annotatedDocument.label = label
                 annotatedDocument.completed = True
+                
+                # Remove metaannotations associated with previous label
+                deletemetanns = MetaAnnotation.__table__.delete().where(MetaAnnotation.annotation == annotatedDocument)
+                db.session.execute(deletemetanns)
+
                 db.session.add(annotatedDocument)
 
         else: # Document has not been labelled before. Create new label and save
