@@ -1,7 +1,7 @@
 <template>
 <!-- eslint-disable max-len -->
   <div class="document">
-    <div class="card text-center">
+    <div class="card">
       <div class="card-header">
         <div class="category">
           <div class="row">
@@ -23,9 +23,8 @@
         </div>
       </div>
       <div class="card-body" id='document_text'>
-        <p class="card-text overflowAuto">
+        <p class="card-text overflowAuto has-text-left">
           <span v-for="(span, span_idx) in document_text['tokens']" :key="span" >
-            <!-- {{ document_text['text'].slice(span['start'], span['end'])}} -->
               <span v-html="document_text['text'].slice(span['start'],span['end'])" :id="'span_' + span_idx" />{{ ' ' }}
           </span>
         </p>
@@ -117,6 +116,7 @@ export default {
                         {headers: {'Authorization': localStorage.getItem('jwt')}})
         .then((res) => {
           EventBus.$emit("label-added", this.currentidx);
+          // this.retrieveAnnotatedDocument(this.currentidx)
           this.getnextdocument(this.currentidx)
         })
         .catch((error) => {
@@ -276,9 +276,9 @@ div.boxwrap div:hover {
   background-color: aqua;
   cursor: pointer;
 }
-div.boxwrap div h5 {
+/* div.boxwrap div h5 {
   text-align: center;
-}
+} */
 pre {
   white-space: pre-wrap;
   word-break: keep-all

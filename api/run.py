@@ -1,10 +1,11 @@
-from flask import Flask, render_template, jsonify, request, json
+from flask import Flask, render_template, jsonify, request, make_response, send_file
 from flask_cors import CORS
 from flask_admin import Admin, AdminIndexView
 from flask_admin.contrib.sqla import ModelView
 from flask_security import current_user, login_required, RoleMixin, Security, SQLAlchemyUserDatastore, UserMixin, utils
 from flask_sqlalchemy import SQLAlchemy
 from random import sample 
+import pandas as pd
 import os.path
 from functools import wraps
 from datetime import datetime, timezone, timedelta
@@ -15,26 +16,14 @@ from spacy.lang.en import English
 from spacy.symbols import ORTH
 from utils.nerannotationsloader import addAnnotations
 import utils.elasticsearchutils as elasticsearchutils
+from app import app, db
+import ast
 
 # Load spacy word tokenizer for sending documents as spans
 nlp = English()
 tokenizer = nlp.tokenizer
 tokenizer.add_special_case("<br>", [{ORTH: "<br>"}])
 
-# instantiate the app
-# DEBUG = True
-app = Flask(__name__)
-app.config['SECRET_KEY'] = 'randomsecretkey'
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///test.db'
-app.config['SQLALCHEMY_COMMIT_ON_TEARDOWN'] = True
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-app.config['FLASK_ADMIN_SWATCH'] = 'cerulean'
-
-# load database
-db = SQLAlchemy(app)
-
-# enable CORS
-CORS(app, resources={r'/*': {'origins': '*'}})
 
 ## Model Definitions
 class User(db.Model):
@@ -517,9 +506,63 @@ def deleteEntity(user):
         db.session.delete(delann)
         db.session.commit()
 
+    return jsonify({'success': True})
+
+
+@app.route('/downloadProject', methods=['POST'])
+@login_required
+def downloadProject(user):
+    req_data = request.get_json()
+    project_id = req_data['project_id']
+
+    annotations = Annotation.query.filter_by(project_id=project_id)
+    
+    export_dicts = []
+    for annotation in annotations:
+        metaanns = MetaAnnotation.query.filter_by(annotatation_id=annotation.id).all()
+
+        if len(metaanns) > 0:
+            for metaann in metaanns:
+                
+                mv = ast.literal_eval(metaann.metataskvalue.metataskvalue)
+                
+                export = {}
+ 
+                export['start_idx'] = mv[0]
+                export['end_idx'] = mv[-1]     
+                export['text'] = annotation.document.text
+                export['document_id'] = annotation.document_id
+                export['user_id'] = annotation.user_id
+                export['username'] = annotation.user.username
+                export['label_id'] = annotation.label_id
+                export['label'] = annotation.label.label
+                export['labelDescription'] = annotation.label.labelDescription
+                export['completed'] = annotation.completed
+                export['project_id'] = annotation.project_id
+                export['project_name'] = annotation.project.name
+                export_dicts.append(export)
+        
+        else:
+                export = {}
+                export['text'] = annotation.document.text
+                export['document_id'] = annotation.document_id
+                export['user_id'] = annotation.user_id
+                export['username'] = annotation.user.username
+                export['label_id'] = annotation.label_id
+                export['label'] = annotation.label.label
+                export['labelDescription'] = annotation.label.labelDescription
+                export['completed'] = annotation.completed
+                export['project_id'] = annotation.project_id
+                export['project_name'] = annotation.project.name
+                export_dicts.append(export)
 
     
-    return jsonify({'success': success})
+    df_export = pd.DataFrame(export_dicts)
+
+    response = make_response(df_export.to_csv(index=False))
+    response.headers["Content-Type"] = "text/json"
+
+    return response
 
 
 ## Initialise the admin panel

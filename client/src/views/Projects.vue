@@ -26,6 +26,12 @@
           <p class="card-footer-item">
             <button class="btn btn-primary" type="button" @click="openProject(project.id)"> Open </button>
           </p>
+          <p class="card-footer-item">
+            <button class="btn btn-primary" type="button" @click="downloadProject(project)"> <i class="fa fa-download"></i> </button>
+          </p>
+          <p class="card-footer-item">
+            <button class="btn btn-primary" type="button" @click="openProject(project.id)"> stats</i> </button>
+          </p>
         </footer>        
       </div>
     </div>
@@ -72,8 +78,31 @@ export default {
       },
 
       openProject(project_id) {
-        console.log(project_id)
+        console.log('opening project ',project_id)
         router.push({ name: 'Annotation', params: {projectid: project_id}});
+      },
+
+      downloadProject(project) {
+        console.log('downloading project ', project.id)
+        const path = 'http://' + this.root_api + ':5001/downloadProject';
+
+        axios.post(path, {'project_id': project.id}, {headers: {'Authorization': localStorage.getItem('jwt')}})
+          .then((res) => {
+                let filename = project.name + '_export.' + 'csv'
+                const data = res.data;
+                const link = document.createElement("a");
+                link.target = "_blank";
+                link.href = "data:text/csv;charset=utf-8," + encodeURIComponent(data);             
+
+
+                link.download = filename;
+                link.click();
+
+            console.log('succesfully downloaded project')
+          })
+          .catch((error) => {
+            console.error(error);
+          });   
       }
   },
 
