@@ -518,6 +518,7 @@ def downloadProject(user):
     
     export_dicts = []
     for annotation in annotations:
+        print(annotation.id)
         metaanns = MetaAnnotation.query.filter_by(annotatation_id=annotation.id).all()
 
         if len(metaanns) > 0:
@@ -525,6 +526,9 @@ def downloadProject(user):
                 
                 mv = ast.literal_eval(metaann.metataskvalue.metataskvalue)
                 
+                if type(mv) == int:
+                    mv = [mv]
+
                 export = {}
  
                 export['start_idx'] = mv[0]
