@@ -15,7 +15,6 @@ import time
 from spacy.lang.en import English
 from spacy.symbols import ORTH
 from utils.nerannotationsloader import addAnnotations
-import utils.elasticsearchutils as elasticsearchutils
 from app import app, db
 import ast
 
@@ -475,18 +474,18 @@ def getEntityInfo(user):
 
     return jsonify({'entity_information': entity_information})
 
-@app.route('/searchconceptinelastic', methods=['POST'])
-@login_required
-def searchconceptinelastic(user):
+# @app.route('/searchconceptinelastic', methods=['POST'])
+# @login_required
+# def searchconceptinelastic(user):
 
-    req_data = request.get_json()
-    cui = req_data['searchConceptString']
-    unique = req_data['unique']
+#     req_data = request.get_json()
+#     cui = req_data['searchConceptString']
+#     unique = req_data['unique']
 
-    searchresult = elasticsearchutils.searchSnomedConcept(cui)     
-    print(searchresult)
+#     searchresult = elasticsearchutils.searchSnomedConcept(cui)     
+#     print(searchresult)
 
-    return jsonify({'searchresult': searchresult})
+#     return jsonify({'searchresult': searchresult})
 
 
 @app.route('/deleteEntity', methods=['POST'])
@@ -564,6 +563,71 @@ def downloadProject(user):
 
     return response
 
+@app.route('/getProjectStats', methods=['POST'])
+@login_required
+def getProjectStats(user):
+
+    # This has only been written to handle mutliclass/multilalbel documents!
+
+    req_data = request.get_json()
+    project_id = req_data['project_id']    
+
+    # Get progress of each user as dict [{'username':no_of_docs_done}...]
+    # Get overlap in terms of labels
+    # Get overlap in terms of spans
+    project_id = req_data['project_id']
+
+    annotations = Annotation.query.filter_by(project_id=project_id)
+    
+    export_dicts = []
+    for annotation in annotations:
+        metaanns = MetaAnnotation.query.filter_by(annotatation_id=annotation.id).all()
+
+        if len(metaanns) > 0:
+            for metaann in metaanns:
+                
+                mv = ast.literal_eval(metaann.metataskvalue.metataskvalue)
+                
+                export = {}
+ 
+                export['start_idx'] = mv[0]
+                export['end_idx'] = mv[-1]     
+                export['text'] = annotation.document.text
+                export['document_id'] = annotation.document_id
+                export['user_id'] = annotation.user_id
+                export['username'] = annotation.user.username
+                export['label_id'] = annotation.label_id
+                export['label'] = annotation.label.label
+                export['labelDescription'] = annotation.label.labelDescription
+                export['completed'] = annotation.completed
+                export['project_id'] = annotation.project_id
+                export['project_name'] = annotation.project.name
+                export_dicts.append(export)
+        
+        else:
+                export = {}
+                export['text'] = annotation.document.text
+                export['document_id'] = annotation.document_id
+                export['user_id'] = annotation.user_id
+                export['username'] = annotation.user.username
+                export['label_id'] = annotation.label_id
+                export['label'] = annotation.label.label
+                export['labelDescription'] = annotation.label.labelDescription
+                export['completed'] = annotation.completed
+                export['project_id'] = annotation.project_id
+                export['project_name'] = annotation.project.name
+                export_dicts.append(export)
+
+    
+    df_export = pd.DataFrame(export_dicts)
+
+    user_ids = list(set(df_export['user_id']))
+
+
+    response = make_response(df_export.to_csv(index=False))
+    response.headers["Content-Type"] = "text/json"
+
+    return response  
 
 ## Initialise the admin panel
 admin = Admin(app, name='Cogstack Annotation Tool', template_mode='bootstrap3')

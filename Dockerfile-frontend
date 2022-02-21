@@ -16,6 +16,8 @@ RUN apt-get install curl && \
 WORKDIR /client
 
 COPY /client/package.json /client/package.json
+COPY /client/package-lock.json /client/package-lock.json
+
 
 # Build frontend
 RUN npm install 

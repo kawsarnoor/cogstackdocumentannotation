@@ -8,5 +8,6 @@ RUN pip install -r requirements.txt
 COPY . . 
 
 RUN ["apt-get", "update"]
-CMD ["python", "example_db_scripts.py"]
-CMD ["gunicorn"  , "-b", "0.0.0.0:5001", "-w", "2", "app:app"]
+WORKDIR /api
+
+CMD ["gunicorn"  , "-b", "0.0.0.0:5001", "-w", "2", "run:app"]

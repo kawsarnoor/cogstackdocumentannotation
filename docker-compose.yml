@@ -8,6 +8,7 @@ services:
      - "5001:5001"
     volumes: 
      - ./dataloader/data:/dataloader/data:ro
+     - ./api/app/test.db:/api/app/test.db
   front-end:
     build:
         context: .

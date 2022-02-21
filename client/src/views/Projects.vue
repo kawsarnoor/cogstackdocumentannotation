@@ -30,7 +30,7 @@
             <button class="btn btn-primary" type="button" @click="downloadProject(project)"> <i class="fa fa-download"></i> </button>
           </p>
           <p class="card-footer-item">
-            <button class="btn btn-primary" type="button" @click="openProject(project.id)"> stats</i> </button>
+            <button class="btn btn-primary" type="button" @click="getProjectStats(project)"> stats</i> </button>
           </p>
         </footer>        
       </div>
@@ -103,7 +103,30 @@ export default {
           .catch((error) => {
             console.error(error);
           });   
-      }
+      },
+
+      getProjectStats(project) {
+        console.log('downloading project ', project.id)
+        const path = 'http://' + this.root_api + ':5001/getProjectStats';
+
+        axios.post(path, {'project_id': project.id}, {headers: {'Authorization': localStorage.getItem('jwt')}})
+          .then((res) => {
+                let filename = project.name + '_export.' + 'csv'
+                const data = res.data;
+                const link = document.createElement("a");
+                link.target = "_blank";
+                link.href = "data:text/csv;charset=utf-8," + encodeURIComponent(data);             
+
+
+                link.download = filename;
+                link.click();
+
+            console.log('succesfully downloaded project')
+          })
+          .catch((error) => {
+            console.error(error);
+          });     
+      },
   },
 
   created() {
